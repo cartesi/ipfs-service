@@ -303,6 +303,7 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 				response = &pb.AddFileResponse{
 					AddOneof: &pb.AddFileResponse_Progress{
 						Progress: &pb.Progress{
+							// TODO: Calculate progress
 							Progress:  0,
 							UpdatedAt: uint64(time.Now().Unix()),
 						}}}
@@ -358,7 +359,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 					Result: &pb.GetFileResult{
 						OutputPath: status.result,
 						RootHash: 	&pb.Hash{
-							// Calculate Merkle root hash from file
+							// TODO: Calculate Merkle root hash from file
 							Data: []byte{'A', 'B', 'C', 0, 255},
 						}}}}
 		} else {
@@ -371,7 +372,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 						Result: &pb.GetFileResult{
 							OutputPath: status.result,
 							RootHash: 	&pb.Hash{
-								// Calculate Merkle root hash from file
+								// TODO: Calculate Merkle root hash from file
 								Data: []byte{'A', 'B', 'C', 0, 255},
 							}}}}
 				status.running = false
@@ -384,6 +385,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 				response = &pb.GetFileResponse{
 					GetOneof: &pb.GetFileResponse_Progress{
 						Progress: &pb.Progress{
+							// TODO: Calculate progress
 							Progress:  0,
 							UpdatedAt: uint64(time.Now().Unix()),
 						}}}
@@ -424,14 +426,16 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 func main() {
 	/// --- Part I: Getting a IPFS node running
 
-	fmt.Println("-- Getting an IPFS node running -- ")
+	log.Printf("-- Getting an IPFS node running -- ")
+
+	ipfsReady := make(chan bool)
 
 	go func() {
 		ipfsCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 	
 		// Spawn a node using a temporary path, creating a temporary repo for the run
-		fmt.Println("Spawning node on a temporary repo")
+		log.Printf("Spawning node on a temporary repo")
 
 		ipfs, err := spawnEphemeral(ipfsCtx)
 		if err != nil {
@@ -449,6 +453,7 @@ func main() {
 			// "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
 			// "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+			"/ip4/104.131.131.82/udp/4001/quic/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 	
 			// IPFS Cluster Pinning nodes
 			// "/ip4/138.201.67.219/tcp/4001/p2p/QmUd6zHcbkbcs7SMxwLs48qZVX3vpcM8errYS7xEczwRMA",
@@ -467,7 +472,10 @@ func main() {
 	
 		go connectToPeers(ipfsCtx, ipfs, bootstrapNodes)
 
+		ipfsReady <- true
+
 		for {
+			// Start listening incoming requests from gRPC client
 			select {
 			case add := <- safeMap.addCh:
 				// Add file to IPFS
@@ -509,17 +517,20 @@ func main() {
 			}
 		}
 	}()
+
+	// Wait ipfs node to be ready before starting gRPC server
+	<- ipfsReady
 	
-	/// --- Part II: Getting a grpc server node running
+	/// --- Part II: Getting a gRPC server node running
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("gRPC server failed to listen: %v", err)
 	} else {
-		log.Printf("grpc server started listening...")
+		log.Printf("gRPC server started listening...")
 	}
 	s := grpc.NewServer()
 	pb.RegisterIpfsServer(s, &server{})
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatalf("gRPC server failed to serve: %v", err)
 	}
 }
