@@ -16,6 +16,7 @@ import (
 	"context"
 	"log"
 	"time"
+	"os"
 
 	pb "ipfs/proto"
 
@@ -50,7 +51,7 @@ func main() {
 			Timeout:	5,
 		})
 		if err != nil {
-			log.Printf("could not get: %v", err)
+			log.Printf("could not GetFile: %v", err)
 			break
 		}
 		log.Printf("GetFile: %s", r.GetGetOneof())
@@ -63,14 +64,25 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	testFileName := "/tmp/ipfs-test"
+	
+    _, err = os.Stat(testFileName)
+    if !os.IsNotExist(err) {
+		// Remove the test file if exists
+        err = os.Remove(testFileName)
+        if err != nil {
+            log.Fatalf("could not remove test file %s", err)
+        }
+	}
+	
 	// Test AddFile error when the file doesn't exist
 	log.Printf("testing AddFile error")
 	for {
 		r, err := c.AddFile(ctx, &pb.AddFileRequest{
-			FilePath: "/tmp/remote00-wsl-loc.txt",
+			FilePath: testFileName,
 		})
 		if err != nil {
-			log.Printf("could not add: %v", err)
+			log.Printf("could not AddFile: %v", err)
 			break
 		}
 		log.Printf("AddFile: %s", r.GetAddOneof())
@@ -83,16 +95,27 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	
+    _, err = os.Stat(testFileName)
+    if os.IsNotExist(err) {
+		// Create the test file if not exist
+        file, err := os.Create(testFileName)
+        if err != nil {
+            log.Fatalf("could not create test file %s", err)
+		}
+		defer file.Close()
+	}
+
 	var ipfsPath string
 	// Test AddFile with progress until done
 	log.Printf("testing AddFile")
 AddLoop:
 	for {
 		r, err := c.AddFile(ctx, &pb.AddFileRequest{
-			FilePath: "/tmp/remote-wsl-loc.txt",
+			FilePath: testFileName,
 		})
 		if err != nil {
-			log.Fatalf("could not add: %v", err)
+			log.Fatalf("could not AddFile: %v", err)
 		}
 		log.Printf("AddFile: %s", r.GetAddOneof())
 
@@ -117,7 +140,7 @@ GetLoop:
 			Timeout:	10,
 		})
 		if err != nil {
-			log.Fatalf("could not get: %v", err)
+			log.Fatalf("could not GetFile: %v", err)
 		}
 		log.Printf("GetFile: %s", r.GetGetOneof())
 
