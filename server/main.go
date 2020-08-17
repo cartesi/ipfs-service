@@ -360,7 +360,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 						OutputPath: status.result,
 						RootHash: 	&pb.Hash{
 							// TODO: Calculate Merkle root hash from file
-							Data: []byte{'A', 'B', 'C', 0, 255},
+							Data: make([]byte, 32),
 						}}}}
 		} else {
 			// Pull progress or result as still running
@@ -373,7 +373,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 							OutputPath: status.result,
 							RootHash: 	&pb.Hash{
 								// TODO: Calculate Merkle root hash from file
-								Data: []byte{'A', 'B', 'C', 0, 255},
+								Data: make([]byte, 32),
 							}}}}
 				status.running = false
 			case retErr := <-status.err:
