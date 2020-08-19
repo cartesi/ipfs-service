@@ -347,7 +347,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 
 	var response *pb.GetFileResponse = nil
 	var err error = nil
-	key := in.GetIpfsPath()
+	key := in.GetIpfsPath() + "_" + in.GetOutputPath();
 	status := safeMap.status[key]
 
 	if status != nil {
@@ -404,7 +404,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 			safeMap.getCh <- getParams{
 				done:		safeMap.status[key].done,
 				err: 		safeMap.status[key].err,
-				ipfsPath: 	key,
+				ipfsPath: 	in.GetIpfsPath(),
 				outputPath: in.GetOutputPath(),
 				timeout:	in.GetTimeout(),
 			}
