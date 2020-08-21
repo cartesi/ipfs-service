@@ -1,13 +1,7 @@
-FROM golang:1.14.4-buster as build-image
+FROM golang:1.14.7-alpine as build-image
 
-ENV PATH="$PATH:$(go env GOPATH)/bin"
+RUN apk add --no-cache alpine-sdk git protoc
 
-RUN \
-    apt-get update && \
-    apt-get install --no-install-recommends -y cmake protobuf-compiler && \
-    rm -rf /var/lib/apt/lists/*
-
-ENV GO111MODULE auto
 RUN go get github.com/golang/protobuf/protoc-gen-go
 RUN go get google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
@@ -38,17 +32,12 @@ RUN \
     && go build
 
 # Container final image
-# ----------------------------------------------------
-FROM golang:1.14.4-buster
+# starts from the same alpine version the buider-image above starts,
+# because we only need golang to build
+FROM alpine:3.12
 
 ENV BASE /opt/cartesi
 WORKDIR $BASE
-
-# Install deps
-RUN apt-get update && apt-get install -y \
-  libssl-dev \
-  ca-certificates \
-  fuse
 
 RUN mkdir -p $BASE/bin
 
