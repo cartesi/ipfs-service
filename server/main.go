@@ -22,6 +22,9 @@ import (
 	"path/filepath"
 	"io/ioutil"
 	"fmt"
+	"encoding/hex"
+	"os/exec"
+	"strings"
 
 	pb "ipfs/proto"
 	
@@ -263,6 +266,37 @@ func getUnixfsNode(path string) (files.Node, error) {
 
 /// -------
 
+// Calculate the merkle tree root hash of the path given the tree log2 size
+func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
+	// don't calculate merkle root hash if log2 size is 0
+	if log2Size == 0 {
+		return make([]byte, 32), nil
+	}
+	// log2 size must be greater than 3
+	if log2Size < 3 {
+		return nil, fmt.Errorf("invalid log2 size: %d, must be greater than or equal to 3", log2Size)
+	}
+
+	out, err := exec.Command(
+		"/opt/cartesi/bin/merkle-tree-hash",
+		fmt.Sprintf("--page-log2-size=%d", 3),
+		fmt.Sprintf("--tree-log2-size=%d", log2Size),
+		fmt.Sprintf("--input=%s", path),
+	).CombinedOutput()
+
+	if err != nil {
+		return nil, fmt.Errorf("%s, %s", err, out)
+	}
+
+	outString := strings.TrimSpace(fmt.Sprintf("%s", out))
+
+	if len(outString) != 64 {
+		return nil, fmt.Errorf("failed to calculate merkle tree root hash: %s", outString)
+	}
+
+	return hex.DecodeString(outString)
+}
+
 // AddFile implements ipfs.IpfsServer
 func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFileResponse, error) {
 	log.Printf("Received AddFileRequest: %+v", *in)
@@ -353,29 +387,43 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 	if status != nil {
 		// Request being processed already
 		if !status.running {
-			// Return result as request is done
-			response = &pb.GetFileResponse{
-				GetOneof: &pb.GetFileResponse_Result{
-					Result: &pb.GetFileResult{
-						OutputPath: status.result,
-						RootHash: 	&pb.Hash{
-							// TODO: Calculate Merkle root hash from file
-							Data: make([]byte, 32),
-						}}}}
-		} else {
-			// Pull progress or result as still running
-			select {
-			case status.result = <- status.done:
-				// Return result
+			rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
+
+			if merkleErr != nil {
+				// Return error from get merkle root hash
+				safeMap.status[key] = nil
+				err = merkleErr
+			} else {
+				// Return result as request is done
 				response = &pb.GetFileResponse{
 					GetOneof: &pb.GetFileResponse_Result{
 						Result: &pb.GetFileResult{
 							OutputPath: status.result,
 							RootHash: 	&pb.Hash{
-								// TODO: Calculate Merkle root hash from file
-								Data: make([]byte, 32),
+								Data: rootHash,
 							}}}}
-				status.running = false
+			}
+		} else {
+			// Pull progress or result as still running
+			select {
+			case status.result = <- status.done:
+				rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
+	
+				if merkleErr != nil {
+					// Return error from get merkle root hash
+					safeMap.status[key] = nil
+					err = merkleErr
+				} else {
+					// Return result
+					response = &pb.GetFileResponse{
+						GetOneof: &pb.GetFileResponse_Result{
+							Result: &pb.GetFileResult{
+								OutputPath: status.result,
+								RootHash: 	&pb.Hash{
+									Data: rootHash,
+								}}}}
+					status.running = false
+				}
 			case retErr := <-status.err:
 				// Return error
 				err = grpc.Errorf(codes.Unknown, retErr.Error())
