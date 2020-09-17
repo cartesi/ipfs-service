@@ -80,11 +80,11 @@ message GetFileResponse {
 
 - [Protocol Buffers](https://github.com/protocolbuffers/protobuf)
   - `apt-get install protobuf-compiler`
-- Golang >= 1.14
-- [Go support for Protocol Buffers](https://github.com/golang/protobuf/tree/master/protoc-gen-go)
-  - `go get github.com/golang/protobuf/protoc-gen-go`
-- [Go plugin for Protocol Buffers](https://github.com/grpc/grpc-go/tree/master/cmd/protoc-gen-go-grpc)
-  - `go get google.golang.org/grpc/cmd/protoc-gen-go-grpc`
+- Golang 1.14
+- [Go support for Protocol Buffers v1.42](https://github.com/golang/protobuf/tree/master/protoc-gen-go)
+  - `go get github.com/golang/protobuf/protoc-gen-go@d04d7b157bb510b1e0c10132224b616ac0e26b17`
+- [Go plugin for Protocol Buffers v1.32-dev](https://github.com/grpc/grpc-go/tree/master/cmd/protoc-gen-go-grpc)
+  - `go get google.golang.org/grpc/cmd/protoc-gen-go-grpc@5f7b337d951f2b7e13cdea854c5893ca940a0c77`
 - [grpc interfaces](https://github.com/cartesi/grpc-interfaces)
 
 ### Compile proto file to go source
