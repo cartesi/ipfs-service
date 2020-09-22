@@ -26,7 +26,7 @@ import (
 	"os/exec"
 	"strings"
 
-	pb "ipfs/proto"
+	pb "github.com/cartesi/ipfs-service/proto"
 	
 	config "github.com/ipfs/go-ipfs-config"
 	files "github.com/ipfs/go-ipfs-files"

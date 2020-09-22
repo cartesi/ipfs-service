@@ -19,7 +19,7 @@ import (
 	"os"
 	"flag"
 
-	pb "ipfs/proto"
+	pb "github.com/cartesi/ipfs-service/proto"
 
 	"google.golang.org/grpc"
 )

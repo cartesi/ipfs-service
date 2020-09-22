@@ -1,4 +1,4 @@
-module ipfs
+module github.com/cartesi/ipfs-service
 
 go 1.14
 
