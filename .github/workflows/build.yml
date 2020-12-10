@@ -1,0 +1,28 @@
+name: Docker
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    env:
+      TAG: latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+          token: ${{ secrets.CI_TOKEN }}
+
+      - run: echo "TAG=${GITHUB_REF:11}" >> $GITHUB_ENV
+        if: startsWith(github.ref, 'refs/tags/v')
+  
+      - name: Docker Login
+        run: echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build IPFS server
+        run: docker build . -t cartesi/ipfs-server:${TAG}
+
+      - name: Publish IPFS Server
+        run: docker push cartesi/ipfs-server:${TAG}
+        if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
