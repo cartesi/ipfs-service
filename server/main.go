@@ -302,6 +302,7 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 	log.Printf("Received AddFileRequest: %+v", *in)
 
 	safeMap.mux.Lock()
+	defer safeMap.mux.Unlock()
 
 	var response *pb.AddFileResponse = nil
 	var err error = nil
@@ -368,8 +369,6 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 				}}}
 	}
 
-	safeMap.mux.Unlock()
-
 	return response, err
 }
 
@@ -378,6 +377,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 	log.Printf("Received GetFileRequest: %+v", *in)
 
 	safeMap.mux.Lock()
+	defer safeMap.mux.Unlock()
 
 	var response *pb.GetFileResponse = nil
 	var err error = nil
@@ -465,8 +465,6 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 					UpdatedAt: uint64(time.Now().Unix()),
 				}}}
 	}
-
-	safeMap.mux.Unlock()
 
 	return response, err
 }
