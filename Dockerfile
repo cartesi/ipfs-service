@@ -29,8 +29,12 @@ RUN mkdir -p $BASE/proto
 RUN cp /root/grpc-interfaces/out/*.go $BASE/proto/
 
 COPY ./server/ $BASE/server
+COPY ./test_client/ $BASE/test_client
 RUN \
     cd ./server \
+    && go build
+RUN \
+    cd ./test_client \
     && go build
 
 # Emulator image, contains merkle-tree-hash util and its dependencies
@@ -52,5 +56,6 @@ RUN mkdir -p $BASE/lib
 COPY --from=emulator $BASE/lib/libcryptopp* $BASE/lib/
 COPY --from=emulator $BASE/bin/merkle-tree-hash $BASE/bin/
 COPY --from=build-image $BASE/server/server $BASE/bin/
+COPY --from=build-image $BASE/test_client/test_client $BASE/bin/
 
 ENTRYPOINT ["/opt/cartesi/bin/server"]
