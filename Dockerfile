@@ -1,4 +1,4 @@
-FROM golang:1.14.7-alpine as build-image
+FROM golang:1.17-alpine as build-image
 
 RUN apk add --no-cache alpine-sdk git protoc
 
@@ -9,7 +9,7 @@ RUN GO111MODULE=on go get google.golang.org/grpc/cmd/protoc-gen-go-grpc@5f7b337d
 
 ENV BASE /opt/cartesi
 WORKDIR $BASE
-        
+
 # Download packages first so they can be cached.
 COPY ./go.mod ./go.sum $BASE/
 RUN go mod download
@@ -21,14 +21,14 @@ RUN \
     mkdir -p /root/grpc-interfaces/out \
     && cd /root/grpc-interfaces \
     && protoc \
-        --go_out=./out \
-        --go-grpc_out=./out \
-        ipfs.proto
+    --go_out=./out \
+    --go-grpc_out=./out \
+    ipfs.proto
 
 RUN mkdir -p $BASE/proto
 RUN cp /root/grpc-interfaces/out/*.go $BASE/proto/
 
-COPY ./server/ $BASE/server
+COPY ./ipfs-api-server/ $BASE/server
 COPY ./test_client/ $BASE/test_client
 RUN \
     cd ./server \
