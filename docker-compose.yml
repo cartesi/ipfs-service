@@ -24,4 +24,5 @@ services:
     links:
       - ipfs
     build: .
-    command: [ "/opt/cartesi/bin/server", "-g", "ipfs:5001" ]
+    command: [ "-g", "http://ipfs:5001" ]
+ 
