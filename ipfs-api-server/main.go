@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"crypto/sha256"
 
 	//"os"
 
@@ -192,6 +193,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 
 	var response *pb.GetFileResponse = nil
 	var err error = nil
+	
 	key := in.GetIpfsPath() + "_" + in.GetOutputPath()
 	status := safeMap.status[key]
 
@@ -309,15 +311,17 @@ func main() {
 
 			case get := <-safeMap.getCh:
 				sh.SetTimeout(time.Duration(get.timeout) * time.Second)
-
-				err := sh.Get(get.ipfsPath, get.outputPath)
+				hash := sha256.Sum256([]byte(get.ipfsPath))
+				
+				safeOutputPath := get.outputPath + "_" + hex.EncodeToString(hash[:])
+				err := sh.Get(get.ipfsPath, safeOutputPath)
 				if err != nil {
 					get.err <- fmt.Errorf("Could not get file: %s", err)
 					break
 				}
 
-				log.Printf("Fetched file from IPFS: %s -> %s", get.ipfsPath, get.outputPath)
-				get.done <- get.outputPath
+				log.Printf("Fetched file from IPFS: %s -> %s, safe name %s", get.ipfsPath, get.outputPath, safeOutputPath)
+				get.done <- safeOutputPath
 			}
 		}
 	}()
