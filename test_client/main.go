@@ -14,10 +14,10 @@ package main
 
 import (
 	"context"
-	"log"
-	"time"
-	"os"
 	"flag"
+	"log"
+	"os"
+	"time"
 
 	pb "github.com/cartesi/ipfs-service/proto"
 
@@ -99,9 +99,9 @@ func main() {
 			IpfsPath:   *argPtr,
 			Log2Size:   0,
 			OutputPath: "/tmp/outout",
-			Timeout:	30,
+			Timeout:    30,
 		}
-		
+
 		r, err := getFile(ctx, &getRequest, &c)
 
 		if err != nil {
@@ -120,7 +120,7 @@ func main() {
 			IpfsPath:   "/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp",
 			Log2Size:   10,
 			OutputPath: "/tmp/outout",
-			Timeout:	5,
+			Timeout:    5,
 		}
 
 		getResponse, err := getFile(ctx, &getRequest, &c)
@@ -135,7 +135,7 @@ func main() {
 		}
 
 		testFileName := "/tmp/ipfs-test"
-		
+
 		_, err = os.Stat(testFileName)
 		if !os.IsNotExist(err) {
 			// Remove the test file if exists
@@ -144,7 +144,7 @@ func main() {
 				log.Fatalf("could not remove test file %s", err)
 			}
 		}
-		
+
 		// Test AddFile error when the file doesn't exist
 		log.Printf("testing AddFile error")
 		addRequest := pb.AddFileRequest{
@@ -161,7 +161,7 @@ func main() {
 				log.Fatalf("AddFile should fail")
 			}
 		}
-		
+
 		_, err = os.Stat(testFileName)
 		if os.IsNotExist(err) {
 			// Create the test file if not exist
@@ -174,7 +174,7 @@ func main() {
 
 		// Test AddFile with progress until done
 		log.Printf("testing AddFile")
-		
+
 		addResponse, err = addFile(ctx, &addRequest, &c)
 
 		if err != nil {
@@ -188,9 +188,9 @@ func main() {
 
 		// Test GetFile with progress until done
 		log.Printf("testing GetFile")
-		
+
 		getRequest.IpfsPath = addResponse.GetResult().GetIpfsPath()
-		
+
 		getResponse, err = getFile(ctx, &getRequest, &c)
 
 		if err != nil {

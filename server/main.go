@@ -14,35 +14,34 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
-	"os"
-	"path/filepath"
-	"io/ioutil"
-	"fmt"
-	"encoding/hex"
-	"os/exec"
-	"strings"
 
 	pb "github.com/cartesi/ipfs-service/proto"
-	
-	config "github.com/ipfs/go-ipfs-config"
+
 	files "github.com/ipfs/go-ipfs-files"
-	libp2p "github.com/ipfs/go-ipfs/core/node/libp2p"
 	icore "github.com/ipfs/interface-go-ipfs-core"
 	icorepath "github.com/ipfs/interface-go-ipfs-core/path"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	libp2p "github.com/ipfs/kubo/core/node/libp2p"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	
-	"github.com/ipfs/go-ipfs/core"
-	"github.com/ipfs/go-ipfs/core/coreapi"
-	"github.com/ipfs/go-ipfs/plugin/loader" // This package is needed so that all the preloaded plugins are loaded automatically
-	"github.com/ipfs/go-ipfs/repo/fsrepo"
+
+	"github.com/ipfs/kubo/config"
+	"github.com/ipfs/kubo/core"
+	"github.com/ipfs/kubo/core/coreapi"
+	"github.com/ipfs/kubo/plugin/loader" // This package is needed so that all the preloaded plugins are loaded automatically
+	"github.com/ipfs/kubo/repo/fsrepo"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
@@ -50,47 +49,63 @@ const (
 	port = ":50051"
 )
 
+type merkleRootHashRequest struct {
+	path     string
+	log2Size uint32
+}
+
+type merkleRootHashCache map[merkleRootHashRequest][]byte
+
 // server is used to implement ipfs.IpfsServer.
 type server struct {
 	pb.UnimplementedIpfsServer
+
+	mrhcMu sync.Mutex
+	mrhc   merkleRootHashCache
+}
+
+func newServer() *server {
+	return &server{
+		mrhc: make(merkleRootHashCache, 0),
+	}
 }
 
 // request is used to track status of each incoming request
 type request struct {
 	done    chan string
 	err     chan error
-	running	bool
-	result 	string
+	running bool
+	result  string
 }
 
 // addParams is used submit AddFile request to IPFS handler routine
 type addParams struct {
-	done    	chan string
-	err     	chan error
-	filePath 	string
+	done     chan string
+	err      chan error
+	filePath string
 }
 
 // getParams is used submit GetFile request to IPFS handler routine
 type getParams struct {
-	done    	chan string
-	err     	chan error
-	ipfsPath 	string
-	outputPath 	string
-	timeout		uint64
+	done       chan string
+	err        chan error
+	ipfsPath   string
+	outputPath string
+	timeout    uint64
 }
 
 // SafeMap is used to track status of each request
 type SafeMap struct {
-	status  map[string]*request
-	mux 	sync.Mutex
-	addCh	chan addParams
-	getCh	chan getParams
+	status map[string]*request
+	mux    sync.Mutex
+	addCh  chan addParams
+	getCh  chan getParams
 }
 
 var safeMap = SafeMap{
 	status: make(map[string]*request),
-	addCh:	make(chan addParams),
-	getCh:	make(chan getParams),
+	addCh:  make(chan addParams),
+	getCh:  make(chan getParams),
 }
 
 /// ------ Setting up the IPFS Repo
@@ -198,33 +213,33 @@ func spawnEphemeral(ctx context.Context) (icore.CoreAPI, error) {
 // Connect to peers list
 func connectToPeers(ctx context.Context, ipfs icore.CoreAPI, peers []string) error {
 	var wg sync.WaitGroup
-	peerInfos := make(map[peer.ID]*peerstore.PeerInfo, len(peers))
+	addrInfos := make(map[peer.ID]*peer.AddrInfo, len(peers))
 	for _, addrStr := range peers {
 		addr, err := ma.NewMultiaddr(addrStr)
 		if err != nil {
 			return err
 		}
-		pii, err := peerstore.InfoFromP2pAddr(addr)
+		aii, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
 			return err
 		}
-		pi, ok := peerInfos[pii.ID]
+		ai, ok := addrInfos[aii.ID]
 		if !ok {
-			pi = &peerstore.PeerInfo{ID: pii.ID}
-			peerInfos[pi.ID] = pi
+			ai = &peer.AddrInfo{ID: aii.ID}
+			addrInfos[ai.ID] = ai
 		}
-		pi.Addrs = append(pi.Addrs, pii.Addrs...)
+		ai.Addrs = append(ai.Addrs, aii.Addrs...)
 	}
 
-	wg.Add(len(peerInfos))
-	for _, peerInfo := range peerInfos {
-		go func(peerInfo *peerstore.PeerInfo) {
+	wg.Add(len(addrInfos))
+	for _, addrInfo := range addrInfos {
+		go func(peerInfo *peer.AddrInfo) {
 			defer wg.Done()
 			err := ipfs.Swarm().Connect(ctx, *peerInfo)
 			if err != nil {
 				log.Printf("failed to connect to %s: %s", peerInfo.ID, err)
 			}
-		}(peerInfo)
+		}(addrInfo)
 	}
 	wg.Wait()
 	return nil
@@ -267,7 +282,16 @@ func getUnixfsNode(path string) (files.Node, error) {
 /// -------
 
 // Calculate the merkle tree root hash of the path given the tree log2 size
-func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
+func (s *server) getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
+	// check if cache already has requested merkle root hash
+	hash, ok := s.getMerkleRootHashFromCache(path, log2Size)
+	if ok {
+		log.Printf("merkle root hash for path=%s and log2Size=%d found in cache", path, log2Size)
+		return hash, nil
+	}
+
+	log.Printf("computing merkle root hash for path=%s and log2Size=%d", path, log2Size)
+
 	// don't calculate merkle root hash if log2 size is 0
 	if log2Size == 0 {
 		return make([]byte, 32), nil
@@ -297,6 +321,33 @@ func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
 	return hex.DecodeString(outString)
 }
 
+func (s *server) getMerkleRootHashFromCache(path string, log2Size uint32) ([]byte, bool) {
+	s.mrhcMu.Lock()
+	defer s.mrhcMu.Unlock()
+
+	req := merkleRootHashRequest{
+		path:     path,
+		log2Size: log2Size,
+	}
+	hash, ok := s.mrhc[req]
+	if ok {
+		return hash, true
+	}
+
+	return hash, false
+}
+
+func (s *server) putMerkleRootHashToCache(path string, log2Size uint32, hash []byte) {
+	s.mrhcMu.Lock()
+	defer s.mrhcMu.Unlock()
+
+	req := merkleRootHashRequest{
+		path:     path,
+		log2Size: log2Size,
+	}
+	s.mrhc[req] = hash
+}
+
 // AddFile implements ipfs.IpfsServer
 func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFileResponse, error) {
 	log.Printf("Received AddFileRequest: %+v", *in)
@@ -317,17 +368,17 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 				AddOneof: &pb.AddFileResponse_Result{
 					Result: &pb.AddFileResult{
 						IpfsPath: status.result,
-						}}}
+					}}}
 		} else {
 			// Pull progress or result as still running
 			select {
-			case status.result = <- status.done:
+			case status.result = <-status.done:
 				// Return result
 				response = &pb.AddFileResponse{
 					AddOneof: &pb.AddFileResponse_Result{
 						Result: &pb.AddFileResult{
 							IpfsPath: status.result,
-							}}}
+						}}}
 				status.running = false
 			case retErr := <-status.err:
 				// Return error
@@ -355,9 +406,9 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 		go func() {
 			// Submit AddFile job to IPFS
 			safeMap.addCh <- addParams{
-				done: 		safeMap.status[key].done,
-				err: 		safeMap.status[key].err,
-				filePath: 	key,
+				done:     safeMap.status[key].done,
+				err:      safeMap.status[key].err,
+				filePath: key,
 			}
 		}()
 
@@ -381,13 +432,13 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 
 	var response *pb.GetFileResponse = nil
 	var err error = nil
-	key := in.GetIpfsPath() + "_" + in.GetOutputPath();
+	key := in.GetIpfsPath() + "_" + in.GetOutputPath()
 	status := safeMap.status[key]
 
 	if status != nil {
 		// Request being processed already
 		if !status.running {
-			rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
+			rootHash, merkleErr := s.getMerkleRootHash(status.result, in.GetLog2Size())
 
 			if merkleErr != nil {
 				// Return error from get merkle root hash
@@ -399,16 +450,16 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 					GetOneof: &pb.GetFileResponse_Result{
 						Result: &pb.GetFileResult{
 							OutputPath: status.result,
-							RootHash: 	&pb.Hash{
+							RootHash: &pb.Hash{
 								Data: rootHash,
 							}}}}
 			}
 		} else {
 			// Pull progress or result as still running
 			select {
-			case status.result = <- status.done:
-				rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
-	
+			case status.result = <-status.done:
+				rootHash, merkleErr := s.getMerkleRootHash(status.result, in.GetLog2Size())
+
 				if merkleErr != nil {
 					// Return error from get merkle root hash
 					safeMap.status[key] = nil
@@ -419,7 +470,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 						GetOneof: &pb.GetFileResponse_Result{
 							Result: &pb.GetFileResult{
 								OutputPath: status.result,
-								RootHash: 	&pb.Hash{
+								RootHash: &pb.Hash{
 									Data: rootHash,
 								}}}}
 					status.running = false
@@ -450,11 +501,11 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 		go func() {
 			// Submit GetFile job to IPFS
 			safeMap.getCh <- getParams{
-				done:		safeMap.status[key].done,
-				err: 		safeMap.status[key].err,
-				ipfsPath: 	in.GetIpfsPath(),
+				done:       safeMap.status[key].done,
+				err:        safeMap.status[key].err,
+				ipfsPath:   in.GetIpfsPath(),
 				outputPath: in.GetOutputPath(),
-				timeout:	in.GetTimeout(),
+				timeout:    in.GetTimeout(),
 			}
 		}()
 
@@ -469,6 +520,13 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 	return response, err
 }
 
+func (s *server) CacheMerkleRootHash(ctx context.Context, in *pb.CacheMerkleRootHashRequest) (*pb.CacheMerkleRootHashResponse, error) {
+	log.Printf("Received CacheMerkleRootHash: %+v", *in)
+	s.putMerkleRootHashToCache(in.GetIpfsPath(), in.GetLog2Size(), in.GetMerkleRootHash().GetData())
+
+	return &pb.CacheMerkleRootHashResponse{}, nil
+}
+
 func main() {
 	/// --- Part I: Getting a IPFS node running
 
@@ -479,7 +537,7 @@ func main() {
 	go func() {
 		ipfsCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-	
+
 		// Spawn a node using a temporary path, creating a temporary repo for the run
 		log.Printf("Spawning node on a temporary repo")
 
@@ -500,7 +558,7 @@ func main() {
 			// "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 			"/ip4/104.131.131.82/udp/4001/quic/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-	
+
 			// IPFS Cluster Pinning nodes
 			"/ip4/138.201.67.219/tcp/4001/p2p/QmUd6zHcbkbcs7SMxwLs48qZVX3vpcM8errYS7xEczwRMA",
 			"/ip4/138.201.67.219/udp/4001/quic/p2p/QmUd6zHcbkbcs7SMxwLs48qZVX3vpcM8errYS7xEczwRMA",
@@ -510,12 +568,12 @@ func main() {
 			"/ip4/138.201.68.74/udp/4001/quic/p2p/QmdnXwLrC8p1ueiq2Qya8joNvk3TVVDAut7PrikmZwubtR",
 			"/ip4/94.130.135.167/tcp/4001/p2p/QmUEMvxS2e7iDrereVYc5SWPauXPyNwxcy9BXZrC1QTcHE",
 			"/ip4/94.130.135.167/udp/4001/quic/p2p/QmUEMvxS2e7iDrereVYc5SWPauXPyNwxcy9BXZrC1QTcHE",
-	
+
 			// You can add more nodes here, for example, another IPFS node you might have running locally, mine was:
 			// "/ip4/127.0.0.1/tcp/4010/p2p/QmZp2fhDLxjYue2RiUvLwT9MWdnbDxam32qYFnGmxZDh5L",
 			// "/ip4/127.0.0.1/udp/4010/quic/p2p/QmZp2fhDLxjYue2RiUvLwT9MWdnbDxam32qYFnGmxZDh5L",
 		}
-	
+
 		go connectToPeers(ipfsCtx, ipfs, bootstrapNodes)
 
 		ipfsReady <- true
@@ -523,25 +581,25 @@ func main() {
 		for {
 			// Start listening incoming requests from gRPC client
 			select {
-			case add := <- safeMap.addCh:
+			case add := <-safeMap.addCh:
 				// Add file to IPFS
 				addFile, err := getUnixfsNode(add.filePath)
 				if err != nil {
 					add.err <- fmt.Errorf("Could not access File: %s", err)
 					break
 				}
-			
+
 				cidFile, err := ipfs.Unixfs().Add(ipfsCtx, addFile)
 				if err != nil {
 					add.err <- fmt.Errorf("Could not add File: %s", err)
 					break
 				}
-			
+
 				log.Printf("Added file to IPFS with CID %s", cidFile.String())
 				add.done <- cidFile.String()
-			case get := <- safeMap.getCh:
+			case get := <-safeMap.getCh:
 				// Get file from IPFS and write to output path
-				ipfsGetCtx, cancel:= context.WithTimeout(ipfsCtx, time.Duration(get.timeout) * time.Second)
+				ipfsGetCtx, cancel := context.WithTimeout(ipfsCtx, time.Duration(get.timeout)*time.Second)
 				defer cancel()
 
 				cidFile := icorepath.New(get.ipfsPath)
@@ -551,13 +609,13 @@ func main() {
 					get.err <- fmt.Errorf("Could not get File: %s", err)
 					break
 				}
-	
+
 				err = files.WriteTo(rootNodeFile, get.outputPath)
 				if err != nil {
 					get.err <- fmt.Errorf("Could not write out the fetched CID: %s", err)
 					break
 				}
-			
+
 				log.Printf("Got file from IPFS and write to %s", get.outputPath)
 				get.done <- get.outputPath
 			}
@@ -565,8 +623,8 @@ func main() {
 	}()
 
 	// Wait ipfs node to be ready before starting gRPC server
-	<- ipfsReady
-	
+	<-ipfsReady
+
 	/// --- Part II: Getting a gRPC server node running
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -575,7 +633,7 @@ func main() {
 		log.Printf("gRPC server started listening...")
 	}
 	s := grpc.NewServer()
-	pb.RegisterIpfsServer(s, &server{})
+	pb.RegisterIpfsServer(s, newServer())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("gRPC server failed to serve: %v", err)
 	}

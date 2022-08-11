@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -23,7 +24,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"crypto/sha256"
 
 	//"os"
 
@@ -36,8 +36,24 @@ import (
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
+type merkleRootHashRequest struct {
+	path     string
+	log2Size uint32
+}
+
+type merkleRootHashCache map[merkleRootHashRequest][]byte
+
 type server struct {
 	pb.UnimplementedIpfsServer
+
+	mrhcMu sync.Mutex
+	mrhc   merkleRootHashCache
+}
+
+func newServer() *server {
+	return &server{
+		mrhc: make(merkleRootHashCache, 0),
+	}
 }
 
 // request is used to track status of each incoming request
@@ -79,7 +95,14 @@ var safeMap = SafeMap{
 }
 
 // Calculate the merkle tree root hash of the path given the tree log2 size
-func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
+func (s *server) getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
+	// check if cache already has requested merkle root hash
+	hash, ok := s.getMerkleRootHashFromCache(path, log2Size)
+	if ok {
+		log.Printf("merkle root hash for path=%s and log2Size=%d found in cache", path, log2Size)
+		return hash, nil
+	}
+
 	// don't calculate merkle root hash if log2 size is 0
 	if log2Size == 0 {
 		return make([]byte, 32), nil
@@ -107,6 +130,33 @@ func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
 	}
 
 	return hex.DecodeString(outString)
+}
+
+func (s *server) getMerkleRootHashFromCache(path string, log2Size uint32) ([]byte, bool) {
+	s.mrhcMu.Lock()
+	defer s.mrhcMu.Unlock()
+
+	req := merkleRootHashRequest{
+		path:     path,
+		log2Size: log2Size,
+	}
+	hash, ok := s.mrhc[req]
+	if ok {
+		return hash, true
+	}
+
+	return hash, false
+}
+
+func (s *server) putMerkleRootHashToCache(path string, log2Size uint32, hash []byte) {
+	s.mrhcMu.Lock()
+	defer s.mrhcMu.Unlock()
+
+	req := merkleRootHashRequest{
+		path:     path,
+		log2Size: log2Size,
+	}
+	s.mrhc[req] = hash
 }
 
 // AddFile implements ipfs.IpfsServer
@@ -184,6 +234,13 @@ func (s *server) AddFile(ctx context.Context, in *pb.AddFileRequest) (*pb.AddFil
 	return response, err
 }
 
+func (s *server) CacheMerkleRootHash(ctx context.Context, in *pb.CacheMerkleRootHashRequest) (*pb.CacheMerkleRootHashResponse, error) {
+	log.Printf("Received CacheMerkleRootHash: %+v", *in)
+	s.putMerkleRootHashToCache(in.GetIpfsPath(), in.GetLog2Size(), in.GetMerkleRootHash().GetData())
+
+	return &pb.CacheMerkleRootHashResponse{}, nil
+}
+
 // GetFile implements ipfs.IpfsServer
 func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFileResponse, error) {
 	log.Printf("Received GetFileRequest: %+v", *in)
@@ -193,14 +250,14 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 
 	var response *pb.GetFileResponse = nil
 	var err error = nil
-	
+
 	key := in.GetIpfsPath() + "_" + in.GetOutputPath()
 	status := safeMap.status[key]
 
 	if status != nil {
 		// Request being processed already
 		if !status.running {
-			rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
+			rootHash, merkleErr := s.getMerkleRootHash(status.result, in.GetLog2Size())
 
 			if merkleErr != nil {
 				// Return error from get merkle root hash
@@ -220,7 +277,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.GetFileRequest) (*pb.GetFil
 			// Pull progress or result as still running
 			select {
 			case status.result = <-status.done:
-				rootHash, merkleErr := getMerkleRootHash(status.result, in.GetLog2Size())
+				rootHash, merkleErr := s.getMerkleRootHash(status.result, in.GetLog2Size())
 
 				if merkleErr != nil {
 					// Return error from get merkle root hash
@@ -312,7 +369,7 @@ func main() {
 			case get := <-safeMap.getCh:
 				sh.SetTimeout(time.Duration(get.timeout) * time.Second)
 				hash := sha256.Sum256([]byte(get.ipfsPath))
-				
+
 				safeOutputPath := get.outputPath + "_" + hex.EncodeToString(hash[:])
 				err := sh.Get(get.ipfsPath, safeOutputPath)
 				if err != nil {
@@ -327,7 +384,7 @@ func main() {
 	}()
 
 	s := grpc.NewServer()
-	pb.RegisterIpfsServer(s, &server{})
+	pb.RegisterIpfsServer(s, newServer())
 
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("gRPC server failed to start: %v", err)
