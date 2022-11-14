@@ -38,7 +38,7 @@ RUN \
     && go build
 
 # Emulator image, contains merkle-tree-hash util and its dependencies
-FROM cartesi/machine-emulator:0.7.0-alpine as emulator
+FROM cartesi/machine-emulator:0.11.1-alpine as emulator
 
 # Container final image
 # starts from the same alpine version the buider-image above starts,
