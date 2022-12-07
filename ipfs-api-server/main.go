@@ -91,8 +91,8 @@ func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
 
 	out, err := exec.Command(
 		"/opt/cartesi/bin/merkle-tree-hash",
-		fmt.Sprintf("--page-log2-size=%d", 3),
-		fmt.Sprintf("--tree-log2-size=%d", log2Size),
+		fmt.Sprintf("--log2-root-size=%d", log2Size),
+		fmt.Sprintf("--log2-word-size=%d", 3),
 		fmt.Sprintf("--input=%s", path),
 	).CombinedOutput()
 
