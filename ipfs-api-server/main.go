@@ -25,7 +25,7 @@ import (
 	"time"
 	"crypto/sha256"
 
-	//"os"
+	"os"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -78,6 +78,18 @@ var safeMap = SafeMap{
 	getCh:  make(chan getParams),
 }
 
+func truncate(path string, log2size uint32) {
+    file, err := os.OpenFile(path, os.O_RDWR, 0644)
+    if err != nil {
+        panic(err)
+    }
+    defer file.Close()
+    err = file.Truncate(1 << log2size);
+    if err != nil {
+        panic(err)
+    }
+}
+
 // Calculate the merkle tree root hash of the path given the tree log2 size
 func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
 	// don't calculate merkle root hash if log2 size is 0
@@ -89,6 +101,7 @@ func getMerkleRootHash(path string, log2Size uint32) ([]byte, error) {
 		return nil, fmt.Errorf("invalid log2 size: %d, must be greater than or equal to 3", log2Size)
 	}
 
+	truncate(path, log2Size);	
 	out, err := exec.Command(
 		"/opt/cartesi/bin/merkle-tree-hash",
 		fmt.Sprintf("--log2-root-size=%d", log2Size),
