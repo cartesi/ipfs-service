@@ -1,6 +1,6 @@
 # IPFS Service
 
-Cartesi IPFS service is a gRPC server that implements the [`AddFile`](#addfile) and [`GetFile`](#getfile) endpoints for its in-process IPFS node. The endpoints are defined in the submodule `grpc-interfaces/ipfs.proto`, and are required to access the filesystem where the files are being manipulated. A gRPC server and test client are implemented in Golang in the `server` and `test_client` directories.
+Cartesi IPFS service is a gRPC server that implements the [`AddFile`](#addfile) and [`GetFile`](#getfile) endpoints and performs them using an external IPFS node. The endpoints are defined in the submodule `grpc-interfaces/ipfs.proto`, and are required to access the filesystem where the files are being manipulated. A gRPC server and test client are implemented in Golang in the `ipfs-api-server` and `test_client` directories.
 
 ## AddFile
 
@@ -96,18 +96,30 @@ $ ./compile.sh
 
 ### Executing the gRPC server
 
+Run a local IPFS node:
+
+```
+ipfs daemon &
+```
+
 Change directory to `server` and execute from there:
 ```bash
-$ cd server
-$ go run main.go
+$ cd ipfs-api-server
+$ go run main.go -g http://localhost:5001
 ```
 
 ### Executing the test client
 
+Run a local IPFS node:
+
+```
+ipfs daemon &
+```
+
 Change directory to `test_client` and execute from there:
 ```bash
 $ cd test_client
-$ go run main.go
+$ go run main.go -g http://localhost:5001
 ```
 
 ### With docker
