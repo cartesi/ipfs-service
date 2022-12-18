@@ -18,7 +18,7 @@ import (
 	"time"
 	"os"
 	"flag"
-
+	"strconv"
 	pb "github.com/cartesi/ipfs-service/proto"
 
 	"google.golang.org/grpc"
@@ -118,7 +118,7 @@ func main() {
 		log.Printf("testing GetFile error")
 		getRequest := pb.GetFileRequest{
 			IpfsPath:   "/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp",
-			Log2Size:   10,
+			Log2Size:   12,
 			OutputPath: "/tmp/outout",
 			Timeout:	5,
 		}
@@ -134,7 +134,7 @@ func main() {
 			}
 		}
 
-		testFileName := "/tmp/ipfs-test"
+		testFileName := "/tmp/ipfs-test-" + strconv.FormatInt(time.Now().Unix(), 10)
 		
 		_, err = os.Stat(testFileName)
 		if !os.IsNotExist(err) {
