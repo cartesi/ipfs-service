@@ -96,30 +96,31 @@ $ ./compile.sh
 
 ### Executing the gRPC server
 
-Run a local IPFS node:
+Run a local IPFS node, for example downloading [Kubo](https://github.com/ipfs/kubo)
 
+Initialize the node (if not already done) & start up the local IPFS node
 ```
+ipfs init --profile=server
+
 ipfs daemon &
 ```
 
-Change directory to `server` and execute from there:
+Change directory to `ipfs-api-server` and execute from there:
 ```bash
 $ cd ipfs-api-server
 $ go run main.go -g http://localhost:5001
 ```
 
+You can also point the parameter at an IPFS API separate from localhost
+
 ### Executing the test client
 
-Run a local IPFS node:
-
-```
-ipfs daemon &
-```
+Execute the gRPC server as in previous step
 
 Change directory to `test_client` and execute from there:
 ```bash
 $ cd test_client
-$ go run main.go -g http://localhost:5001
+$ go run main.go
 ```
 
 ### With docker
