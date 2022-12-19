@@ -96,6 +96,8 @@ $ ./compile.sh
 
 ### Executing the gRPC server
 
+Install the Cartesi Emulator such that /opt/cartesi/bin/merkle-tree-hash exists
+
 Run a local IPFS node, for example downloading [Kubo](https://github.com/ipfs/kubo)
 
 Initialize the node (if not already done) & start up the local IPFS node
@@ -123,6 +125,39 @@ $ cd test_client
 $ go run main.go
 ```
 
+Sample correct test run:
+```
+2022/12/19 20:48:10 testing GetFile error
+2022/12/19 20:48:10 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:10 GetFile: &{updated_at:1671479290}
+2022/12/19 20:48:11 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:11 GetFile: &{updated_at:1671479291}
+2022/12/19 20:48:12 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:12 GetFile: &{updated_at:1671479292}
+2022/12/19 20:48:13 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:13 GetFile: &{updated_at:1671479293}
+2022/12/19 20:48:14 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:14 GetFile: &{updated_at:1671479294}
+2022/12/19 20:48:15 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:/ipfs/QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:15 could not GetFile: rpc error: code = Unknown desc = Could not get file: Post "http://localhost:5001/api/v0/get?arg=%!F(MISSING)ipfs%!F(MISSING)QmWtCNv1euC7Fqkv61npo8LqrPLp3sVpsQHHj2dqg7Ljwp&create=true": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+2022/12/19 20:48:15 testing AddFile error
+2022/12/19 20:48:15 Received AddFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f9e0} sizeCache:0 unknownFields:[] FilePath:/tmp/ipfs-test-1671479295}
+2022/12/19 20:48:15 AddFile: &{updated_at:1671479295}
+2022/12/19 20:48:16 Received AddFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f9e0} sizeCache:0 unknownFields:[] FilePath:/tmp/ipfs-test-1671479295}
+2022/12/19 20:48:16 could not AddFile: rpc error: code = Unknown desc = Could not add file: lstat /tmp/ipfs-test-1671479295: no such file or directory
+2022/12/19 20:48:16 testing AddFile
+2022/12/19 20:48:16 Received AddFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f9e0} sizeCache:0 unknownFields:[] FilePath:/tmp/ipfs-test-1671479295}
+2022/12/19 20:48:16 AddFile: &{updated_at:1671479296}
+2022/12/19 20:48:16 Added file to IPFS with CID QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH
+2022/12/19 20:48:17 Received AddFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f9e0} sizeCache:0 unknownFields:[] FilePath:/tmp/ipfs-test-1671479295}
+2022/12/19 20:48:17 AddFile: &{ipfs_path:"QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH"}
+2022/12/19 20:48:17 testing GetFile
+2022/12/19 20:48:17 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:17 GetFile: &{updated_at:1671479297}
+2022/12/19 20:48:17 Fetched file from IPFS: QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH -> /tmp/outout, safe name /tmp/outout_1274bb5509a85f763e7236b2274046261948f5903c2feb99019df50fa8be7ec8
+2022/12/19 20:48:18 Received GetFileRequest: {state:{NoUnkeyedLiterals:{} DoNotCompare:[] DoNotCopy:[] atomicMessageInfo:0xc00015f500} sizeCache:0 unknownFields:[] IpfsPath:QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH Log2Size:12 OutputPath:/tmp/outout Timeout:5}
+2022/12/19 20:48:18 GetFile: &{output_path:"/tmp/outout_1274bb5509a85f763e7236b2274046261948f5903c2feb99019df50fa8be7ec8"  root_hash:{data:"عn[oE\x9e\x9c\xb6\xa2\xf4\x1b\xf2vǸ\\\x10\xcdFb\xc0L\xbb\xb3eCG&\xc0\xa0"}}
+```
 ### With docker
 
 [PLACEHOLDER]
